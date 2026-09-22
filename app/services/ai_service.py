@@ -9,11 +9,11 @@ from app.core.config import settings
 
 class ResumeAnalysisResult(BaseModel):
     summary: str
-    skills: str
-    experience: str
-    education: str
-    certifications: str
-    keywords: str
+    skills: list[str]
+    experience: list[str]
+    education: list[str]
+    certifications: list[str]
+    keywords: list[str]
 
 
 def analyze_job_description(job_description: str) -> dict:
@@ -45,101 +45,85 @@ def analyze_resume(resume_text: str) -> dict:
                 "Full Stack Developer with experience building web applications "
                 "using React, Angular, ASP.NET Core, REST APIs, SQL, and PostgreSQL."
             ),
-            skills=(
-                "C#, JavaScript, TypeScript, SQL, React, Angular, ASP.NET Core, "
-                "REST APIs, SQL Server, PostgreSQL, MongoDB, Docker, Git, GitHub, "
-                "Entity Framework Core"
-            ),
-            experience=(
-                "Full Stack Developer experience developing e-commerce applications, "
-                "REST APIs, database-backed applications, and modern web interfaces. "
-                "Previous experience includes technical support and sales."
-            ),
-            education=(
-                "Industrial Engineering from Universidad Latinoamericana and "
+            skills=[
+                "C#",
+                "JavaScript",
+                "TypeScript",
+                "SQL",
+                "React",
+                "Angular",
+                "ASP.NET Core",
+                "REST APIs",
+                "SQL Server",
+                "PostgreSQL",
+                "MongoDB",
+                "Docker"
+            ],
+            experience=[
+                "Full Stack Developer experience developing e-commerce applications.",
+                "Developed REST APIs and database-backed applications.",
+                "Built modern web interfaces using Angular and React.",
+                "Previous experience includes technical support.",
+                "Previous experience includes sales."
+            ],
+            education=[
+                "Industrial Engineering from Universidad Latinoamericana.",
                 "Master's studies in Software Engineering at Universidad UTEL."
-            ),
-            certifications=(
-                "Back-End Development with .NET, Full-Stack Integration, "
-                "Security and Authentication, Data Structures and Algorithms, "
-                "Deployment and DevOps."
-            ),
-            keywords=(
-                "Full Stack Developer, React, Angular, ASP.NET Core, .NET, "
-                "REST APIs, SQL, PostgreSQL, MongoDB, Docker, Git, GitHub"
-            )
+            ],
+            certifications=[
+                "Back-End Development with .NET",
+                "Full-Stack Integration",
+                "Security and Authentication",
+                "Data Structures and Algorithms",
+                "Deployment and DevOps"
+            ],
+            keywords=[
+                "Full Stack Developer",
+                "React",
+                "Angular",
+                "ASP.NET Core",
+                ".NET",
+                "REST APIs",
+                "SQL",
+                "PostgreSQL",
+                "MongoDB",
+                "Docker"
+            ]
         )
+
         return result.model_dump()
 
     prompt = f"""
-You are an expert professional resume parser and ATS analysis system.
-
-Analyze the resume below and return ONLY valid JSON.
+Analyze this resume and return ONLY valid JSON.
 
 Return exactly these six fields:
 
 {{
   "summary": "",
-  "skills": "",
-  "experience": "",
-  "education": "",
-  "certifications": "",
-  "keywords": ""
+  "skills": [],
+  "experience": [],
+  "education": [],
+  "certifications": [],
+  "keywords": []
 }}
 
-EXPERIENCE:
-Include ONLY actual professional work experience.
+RULES:
 
-Include job title, company, dates, responsibilities, and achievements
-when explicitly available.
-
-Do NOT include universities, degrees, academic programs, grades,
-courses, or certifications in experience.
-
-EDUCATION:
-Include ONLY formal academic education.
-
-Include university, degree, field of study, dates, and academic
-information when explicitly available.
-
-Do NOT include jobs, employers, responsibilities, or work experience
-in education.
-
-CERTIFICATIONS:
-Include ONLY explicitly listed certifications, professional
-certificates, completed courses, training programs, or credentials.
-
-Do not turn ordinary skills into certifications.
-
-SKILLS:
-Include technical and professional skills explicitly found
-in the resume.
-
-KEYWORDS:
-Include important employment-related keywords explicitly found
-in the resume, especially job titles, technologies, programming
-languages, frameworks, databases, tools, methodologies, and
-professional areas.
-
-STRICT RULES:
-
-1. Return JSON only.
-2. Do not use Markdown.
-3. Do not add extra fields.
-4. Do not invent information.
-5. Do not infer missing information.
-6. Use only information explicitly present in the resume.
-7. Keep experience and education completely separate.
-8. Keep certifications and ordinary skills completely separate.
-9. If a category has no information, return "Not specified".
-10. Preserve company names, job titles, dates, degrees, and
-    certification names when available.
-11. Do not combine unrelated jobs into one invented position.
-12. Do not treat university projects as employment unless the
-    resume explicitly identifies them as professional work.
-13. Do not treat courses as university degrees.
-14. Do not treat technologies as certifications.
-15. Keep the output concise but informative.
+- summary: one short sentence.
+- skills: maximum 12 items.
+- experience: maximum 5 short items.
+- Include ONLY actual jobs or professional work in experience.
+- NEVER include universities, degrees, courses, or education in experience.
+- education: maximum 3 short items.
+- Include ONLY universities, degrees, fields of study, and academic dates.
+- certifications: maximum 5 items.
+- Include ONLY explicitly listed certifications, courses, training, or credentials.
+- keywords: maximum 10 important employment-related keywords.
+- Use ONLY information explicitly present in the resume.
+- Do not invent information.
+- Do not infer missing information.
+- Return JSON only.
+- Do not add extra fields.
 
 RESUME:
 
@@ -150,7 +134,11 @@ RESUME:
         "model": settings.ollama_model,
         "prompt": prompt,
         "stream": False,
-        "format": "json"
+        "format": "json",
+        "keep_alive": "10m",
+        "options": {
+            "num_predict": 350
+        }
     }
 
     request = Request(
@@ -163,16 +151,19 @@ RESUME:
     try:
         with urlopen(request, timeout=300) as response:
             response_data = json.loads(response.read().decode("utf-8"))
+
     except HTTPError as exc:
         error_body = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(
             f"Ollama request failed ({exc.code}): {error_body}"
         ) from exc
+
     except URLError as exc:
         raise RuntimeError(
             "Could not connect to Ollama. "
             "Make sure Ollama is running on http://127.0.0.1:11434."
         ) from exc
+
     except TimeoutError as exc:
         raise RuntimeError(
             "Ollama analysis timed out after 300 seconds."
@@ -185,12 +176,22 @@ RESUME:
 
     try:
         parsed_result = json.loads(raw_result)
+
     except json.JSONDecodeError as exc:
-        raise RuntimeError("Ollama returned invalid JSON.") from exc
+        raise RuntimeError(
+            "Ollama returned invalid JSON."
+        ) from exc
 
     try:
-        parsed_result.setdefault("keywords", "Not specified")
+        parsed_result.setdefault("summary", "Not specified")
+        parsed_result.setdefault("skills", [])
+        parsed_result.setdefault("experience", [])
+        parsed_result.setdefault("education", [])
+        parsed_result.setdefault("certifications", [])
+        parsed_result.setdefault("keywords", [])
+
         result = ResumeAnalysisResult.model_validate(parsed_result)
+
     except Exception as exc:
         raise RuntimeError(
             f"Ollama returned an unexpected analysis format: {parsed_result}"
