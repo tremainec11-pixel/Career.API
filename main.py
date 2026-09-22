@@ -11,11 +11,13 @@ from app.api.routes.resume_analysis import router as resume_analysis_router
 from app.core.dependencies import get_current_user
 from app.models.user import User
 
+
 app = FastAPI(
     title="CareerAI API",
     description="AI-powered career and job intelligence platform",
     version="1.0.0"
 )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,6 +29,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 app.include_router(auth_router)
 app.include_router(application_router)
