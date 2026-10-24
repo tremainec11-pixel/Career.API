@@ -1,3 +1,4 @@
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
@@ -6,13 +7,16 @@ from app.core.config import settings
 
 engine = create_engine(
     settings.database_url,
-    echo=settings.debug
+    echo=settings.debug,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    connect_args={"connect_timeout": 10},
 )
 
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
-    bind=engine
+    bind=engine,
 )
 
 
