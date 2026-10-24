@@ -7,6 +7,7 @@ from app.models.resume import Resume
 from app.models.resume_analysis import ResumeAnalysis
 from app.models.user import User
 from app.services.ai_service import analyze_resume
+from app.services.rag_service import index_resume, search_resume_chunks
 from app.schemas.resume import ResumeAnalysisResponse
 
 
@@ -105,3 +106,100 @@ def analyze_resume_with_ai(
         "certifications": new_analysis.certifications,
         "keywords": new_analysis.keywords
     }
+
+
+@router.post(
+    "/{resume_id}/rag/index",
+    status_code=status.HTTP_200_OK
+)
+def index_resume_for_rag(
+    resume_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.id == resume_id,
+            Resume.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if resume is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found"
+        )
+
+    if not resume.extracted_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Resume does not contain extracted text"
+        )
+
+    try:
+        chunks_created = index_resume(db, resume)
+        return {
+            "resume_id": resume.id,
+            "chunks_created": chunks_created,
+            "message": "Resume indexed successfully"
+        }
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to index resume"
+        )
+
+
+@router.post(
+    "/{resume_id}/rag/search",
+    status_code=status.HTTP_200_OK
+)
+def search_resume_for_rag(
+    resume_id: int,
+    query: str,
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.id == resume_id,
+            Resume.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if resume is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found"
+        )
+
+    try:
+        results = search_resume_chunks(
+            db=db,
+            resume_id=resume.id,
+            user_id=current_user.id,
+            query=query,
+            limit=limit
+        )
+
+        return {
+            "resume_id": resume.id,
+            "query": query,
+            "results": results
+        }
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to search resume"
+        )

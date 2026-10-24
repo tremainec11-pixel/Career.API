@@ -4,6 +4,7 @@ from app.models.job import Job
 from app.models.job_analysis import JobAnalysis
 from app.models.resume import Resume
 from app.models.resume_analysis import ResumeAnalysis
+from app.models.resume_chunk import ResumeChunk
 from app.models.user import User
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "JobAnalysis",
     "Resume",
     "ResumeAnalysis",
-    "User"
+    "ResumeChunk",
+    "User",
 ]
